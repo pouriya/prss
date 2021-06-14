@@ -1,5 +1,10 @@
 # PRSS
-Simple script that fetches RSS feeds periodically and (after making a disk cache) sends updated feeds via Gmail.
+Simple script that fetches RSS feeds periodically and (after making a disk cache) sends updated feeds via Gmail.  
+![prss-cmd](https://github.com/pouriya/prss/releases/download/21.6.13/prss.png)  
+![prss-gmail-inbox](https://github.com/pouriya/prss/releases/download/21.6.13/prss-gmail-inbox.png)  
+![prss-gmail-en](https://github.com/pouriya/prss/releases/download/21.6.13/prss-gmail-en.png)  
+![prss-gmail-fa](https://github.com/pouriya/prss/releases/download/21.6.13/prss-gmail-fa.png)  
+
 
 
 # Usage
