@@ -9,6 +9,10 @@ from datetime import datetime
 from os import rename, remove, environ
 from os.path import isfile
 from syslog import LOG_ERR, LOG_INFO, LOG_WARNING
+from json import dumps as json_encode
+from json import loads as json_decode
+import http.client as http_client
+import urllib.parse as url_parser
 
 
 __version__ = '21.6.13'
@@ -23,8 +27,9 @@ green = '\033[1;32m' if colorize else ''
 reset = '\033[0m' if colorize else ''
 COLORS = {'red': red, 'white': white, 'gray': gray, 'yellow': yellow, 'green': green, 'reset': reset}
 
-SYSLOG = True if environ.get('PRSS_NO_SYSLOG') is None else False
+SYSLOG = True if environ.get('PRSS_SYSLOG') is not None else False
 PRINT_RSS_ENTRY = False if environ.get('PRSS_PRINT_RSS_ENTRY') is None else True
+DEFAULT_HTTP_CONNECT_TIMEOUT = 15
 
 
 def datetime_string():
@@ -336,6 +341,115 @@ class PRSS:
         pass
 
 
+def make_http_connection(host, port, tls, timeout):
+    default_port = 443 if tls else 80
+    port = port if port is not None else default_port
+    timeout = timeout if timeout is not None else DEFAULT_HTTP_CONNECT_TIMEOUT
+    try:
+        if tls:
+            http_connection = http_client.HTTPSConnection(host, port=port, timeout=timeout)
+        else:
+            http_connection = http_client.HTTPConnection(host, port=port, timeout=timeout)
+    except Exception as connect_error:
+        log_error(
+            'could not connect to {yellow}{}:{}{reset}{red}:{reset} {white}{}{reset}',
+            [host, port, connect_error]
+        )
+        return False
+    return http_connection
+
+
+def read_and_decode_http_response(http_connection, host, port, http_path, body, log_text):
+    try:
+        http_response = http_connection.getresponse()
+    except Exception as request_error:
+        log_error(
+            'could not get response from {yellow}{}:{}/{}{reset}{red} with body{reset} {yellow}{}{reset}{red}:{reset} {'
+            'white}{}{reset}',
+            [host, port, http_path, body, request_error]
+        )
+        return False
+    try:
+        response = http_response.read()
+    except Exception as response_error:
+        log_error(
+            'could not read response from {yellow}{}:{}/{}{reset}{red} with body{reset} {yellow}{}{reset}{red}:{reset} '
+            '{white}{}{reset}',
+            [host, port, http_path, body, response_error]
+        )
+        return False
+    if not response:
+        return None
+    try:
+        response = json_decode(response)
+    except Exception as decode_error:
+        log_error(
+            'could not decode response {yellow}{!r}{reset}{red} from {reset}{yellow}{}:{}/{}{reset}{red} with body{rese'
+            't} {yellow}{}{reset}{red}:{reset} {white}{}{reset}',
+            [response, host, port, http_path, body, decode_error]
+        )
+        return False
+    if 'errorDescription' in response.keys():
+        reason = response['errorDescription']
+        log_error(
+            'could {} {yellow}{}:{}/{}{reset}{red} with body{reset} {yellow}{}{reset}{red}:{reset} {white}{}{reset}',
+            [log_text, host, port, http_path, body, reason]
+        )
+        return False
+    return response
+
+
+def send_notification(
+        host,
+        message,
+        application_token,
+        priority=None,
+        title=None,
+        tls=True,
+        extras=None,
+        port=None,
+        timeout=None
+):
+    http_connection = make_http_connection(host, port, tls, timeout)
+    if http_connection is False:
+        return False
+    http_path = '/message?' + url_parser.urlencode({'token': application_token})
+    log_http_path = '/message?token=' + \
+                    application_token[0] + ((len(application_token) - 2) * '*') + application_token[-1]
+    http_headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+    priority = priority if priority is not None else 0
+    body = {'message': message, 'priority': priority}
+    if title:
+        body['title'] = title
+    if extras:
+        body['extras'] = extras
+    body_json = json_encode(body, sort_keys=True)
+    try:
+        http_connection.request('POST', http_path, body_json, http_headers)
+    except Exception as request_error:
+        log_error(
+            'could not send request to {yellow}{}:{}/{}{reset}{red} with body{reset} {yellow}{}{reset}{red}:{reset} {wh'
+            'ite}{}{reset}',
+            [host, port, log_http_path, body_json, request_error]
+        )
+        return False
+    response = read_and_decode_http_response(
+        http_connection,
+        host,
+        port,
+        log_http_path,
+        body_json,
+        'send notification to'
+    )
+    if type(response) is dict:
+        log_info(
+            'sent notification to {yellow}{}:{}{reset}{red} with body{reset} {yellow}{}{reset}',
+            [host, port, body_json]
+        )
+        return response['id']
+    return response
+
+
 if __name__ == '__main__':
     from sys import argv as cmd_args
 
@@ -344,32 +458,33 @@ if __name__ == '__main__':
     if 'help' in cmd_args or '-h' in cmd_args or '--help' in cmd_args:
         print(
             'It needs a file that contains RSS-feed links in each line and fetches RSS feeds periodically and (after ma'
-            'king a disk cache) sends updated feeds via Gmail.'
+            'king a disk cache) sends updated feeds to Gotify.'
         )
         print()
         print('Required environment variables:')
         print('PRSS_URL_FILE')
-        print('PRSS_SENDER')
-        print('PRSS_PASSWORD')
-        print('PRSS_RECEIVER')
+        print('PRSS_GOTIFY_HOSTNAME')
+        print('PRSS_GOTIFY_PORT')
+        print('PRSS_GOTIFY_APPLICATION_TOKEN')
+        print('PRSS_GOTIFY_TLS')
         print()
         print('for example:')
         print('PRSS_URL_FILE=/a/file/containing/my/rss-feed/links')
-        print('PRSS_SENDER=my.gamil.username@gmail.com')
-        print('PRSS_PASSWORD=my-gm4il-p4ssw0rd')
-        print('PRSS_RECEIVER=receiver-gmail-username@gmail.com')
+        print('PRSS_GOTIFY_HOSTNAME=notifications.example.tld')
+        print('PRSS_GOTIFY_PORT=443')
+        print('PRSS_GOTIFY_TLS=1')
+        print('PRSS_GOTIFY_APPLICATION_TOKEN=MyS3cr3tT0k3n')
         print()
         print('Optional environment variables with default values:')
-        print('CACHE_FILE={}'.format(PRSS_CACHE_FILE))
-        print('CACHE_MAX_SIZE=1000')
-        print('SLEEP_RANGE_START=60')
-        print('SLEEP_RANGE_STOP=120')
+        print('PRSS_CACHE_FILE={}'.format(PRSS_CACHE_FILE))
+        print('PRSS_CACHE_MAX_SIZE=1000')
+        print('PRSS_SLEEP_RANGE_START=60')
+        print('PRSS_SLEEP_RANGE_STOP=120')
         print()
         print('Undefined environment variables:')
         print('PRSS_NO_COLORIZE')
-        print('PRSS_NO_SYSLOG')
+        print('PRSS_SYSLOG')
         print('PRSS_PRINT_RSS_ENTRY')
-        print('PRSS_PRINT_MAIL_CONTENT')
         print()
         print('Note that you can put environment variables in a file named {} or .env too.'.format(PRSS_ENV_FILE))
         print()
@@ -380,10 +495,6 @@ if __name__ == '__main__':
         print(__version__)
         exit(0)
 
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
     class Main(PRSS):
 
         def __init__(
@@ -392,9 +503,10 @@ if __name__ == '__main__':
                 cache_filename,
                 max_cache_size,
                 sleep_range,
-                from_mail,
-                password,
-                to_mail
+                hostname,
+                port,
+                application_token,
+                tls
         ):
             super().__init__(
                 url_filename,
@@ -402,16 +514,16 @@ if __name__ == '__main__':
                 max_cache_size,
                 sleep_range
             )
-            self.from_mail = from_mail
-            self.to_mail = to_mail
-            self.password = password
-            self.print_mail_content = False if environ.get('PRSS_PRINT_MAIL_CONTENT') is None else True
+            self.hostname = hostname
+            self.port = port
+            self.application_token = application_token
+            self.tls = tls
 
         def post_update_cache(self, feeds):
-            self.send_feeds_to_mail(feeds)
+            self.send_feeds_to_gotify(feeds)
             return feeds
 
-        def send_feeds_to_mail(self, feeds):
+        def send_feeds_to_gotify(self, feeds):
             fa = []
             en = []
             for name, url_feeds in feeds:
@@ -425,58 +537,33 @@ if __name__ == '__main__':
                     fa.append((name, url_feeds))
                 else:
                     en.append((name, url_feeds))
-            fa != [] and self.send_mail(fa, True)
-            en != [] and self.send_mail(en)
+            fa != [] and self.send_mail(fa, 'Farsi')
+            en != [] and self.send_mail(en, 'English')
 
-        def send_mail(self, feeds, fa=False):
-            alignment = 'right' if fa else 'left'
-            language_code = 'fa' if fa else 'en'
-            language = 'farsi' if fa else 'english'
-            mail_content = ''
-            content_count = 0
+        def send_mail(self, feeds, lang):
+            notification_count = 0
             for name, url_feeds in feeds:
                 title, url, summary, image = url_feeds
                 if not name:
                     name = get_domain_from_url(url)
-                mail_content += '<h3 style="text-align:{};">{}</h3>\n <p style="text-align:{};">\n'.format(
-                    alignment,
-                    name,
-                    alignment
+                extras = {
+                    'client::notification': {'click': {'url': url}},
+                    # 'android::action': {'onReceive': {'intentUrl': url}},
+                    'client::display': {'contentType': 'text/markdown'}
+                }
+                send_notification(
+                    self.hostname,
+                    summary + '\n - [**LINK**]({})'.format(url),
+                    self.application_token,
+                    title='[' + name + ']\n ' + title,
+                    tls=self.tls,
+                    port=self.port,
+                    extras=extras
                 )
-
-                mail_content += '  <a href="{}"><b>{}</b></a>\n'.format(url, title)
-                # height: auto;
-                # max-width: 100%;
-                # width: 100%;
-                image_content = '' if not image else '<br/><img src="{}" alt="{}" style="width:100%;height:auto;max-wi'\
-                    'dth:100%"/>'.format(image, title)
-                mail_content += '  ' + image_content + '\n'
-                if summary:
-                    mail_content += '  <br/>{}<br/><br/>\n'.format(summary)
-                mail_content += ' </p>\n'
-                content_count += 1
-            sender_address = self.from_mail
-            sender_pass = self.password
-            receiver_address = self.to_mail
-            message = MIMEMultipart()
-            message.add_header('Content-Type', 'text/html; charset=UTF-8')
-            message['From'] = sender_address
-            message['To'] = receiver_address
-            message['Subject'] = '{} - {} - ({:0>4})'.format(datetime_string(), language_code, content_count)
-            message.attach(MIMEText(mail_content, 'html'))
-            self.print_mail_content and print('{}\nMAIL CONTENT:\n{}\n{}'.format('-' * 80, mail_content, '-' * 80))
-            try:
-                session = smtplib.SMTP('smtp.gmail.com', 587)  # use gmail with port
-                session.starttls()  # enable security
-                session.login(sender_address, sender_pass)  # login with mail_id and password
-                session.sendmail(sender_address, receiver_address, message.as_string())
-                session.quit()
-            except Exception as error:
-                log_error('could not send mail: {}', [error])
-                return False
+                notification_count += 1
             log_info(
-                '{green}{}{reset} {white}{}{reset} content(s) have been sent to {white}{!r}{reset}',
-                [content_count, language, sender_address]
+                '{green}{}{reset} {white}{}{reset} content(s) have been sent to Gotify at {white}{!r}{reset}',
+                [notification_count, lang, self.hostname]
             )
             return True
 
@@ -504,9 +591,10 @@ if __name__ == '__main__':
             ('CACHE_MAX_SIZE', '1000'),
             ('SLEEP_RANGE_START', '60'),
             ('SLEEP_RANGE_STOP', '120'),
-            ('SENDER', None),
-            ('PASSWORD', None),
-            ('RECEIVER', None)
+            ('GOTIFY_HOSTNAME', None),
+            ('GOTIFY_APPLICATION_TOKEN', None),
+            ('GOTIFY_PORT', '443'),
+            ('GOTIFY_TLS', '1')
         ]
     ]
     cfg = {}
@@ -519,15 +607,17 @@ if __name__ == '__main__':
             value = default_value
         key = key.replace('PRSS_', '')
         cfg[key] = value
+    cfg['GOTIFY_TLS'] = True if cfg['GOTIFY_TLS'] == '1' else False
     try:
         Main(
             cfg['URL_FILE'],
             cfg['CACHE_FILE'],
             int(cfg['CACHE_MAX_SIZE']),
             (int(cfg['SLEEP_RANGE_START']), int(cfg['SLEEP_RANGE_STOP'])),
-            cfg['SENDER'],
-            cfg['PASSWORD'],
-            cfg['RECEIVER']
+            cfg['GOTIFY_HOSTNAME'],
+            int(cfg['GOTIFY_PORT']),
+            cfg['GOTIFY_APPLICATION_TOKEN'],
+            cfg['GOTIFY_TLS']
         ).run()
     except KeyboardInterrupt:
         print()
