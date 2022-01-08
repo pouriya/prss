@@ -45,7 +45,7 @@ You should have Python3.6^ installed.
 ```sh
 $ pip3 install feedparser
 ...
-$ curl -sSf https://raw.githubusercontent.com/pouriya/prss/21.6.13/prss.py > prss && \
+$ curl -sSf https://raw.githubusercontent.com/pouriya/prss/22.01.08/prss.py > prss && \
   chmod a+x prss                                                                  && \
   sudo mv prss /usr/local/bin/prss                                                && \
   prss -v
