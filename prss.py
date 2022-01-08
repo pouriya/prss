@@ -15,7 +15,7 @@ import http.client as http_client
 import urllib.parse as url_parser
 
 
-__version__ = '21.6.13'
+__version__ = '22.01.08'
 __author__ = 'pouriya.jahanbakhsh@gmail.com'
 
 colorize = True if environ.get('PRSS_NO_COLORIZE') is None else False
