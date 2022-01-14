@@ -103,7 +103,7 @@ def fetch_rss(url):
                 link = entry['links'][0]['href']
                 summery = ''
                 if 'summary' in entry.keys():
-                    summery = entry['summary']
+                    summery = remove_html_tags(entry['summary'])
                 image = None
                 for link_item in entry['links'][1:]:
                     if 'type' in link_item.keys():
@@ -127,6 +127,15 @@ def fetch_rss(url):
     if entries:
         log_info('fetched {green}{}{reset} RSS feeds from {white}{!r}{reset}', [len(entries), hide_url_path(url)])
     return entries
+
+
+def remove_html_tags(text):
+    while True:
+        tag_start_position, tag_stop_position = text.find('<'), text.find('>')
+        # print(text, tag_start_position, tag_stop_position)
+        if tag_start_position is -1 or tag_stop_position is -1 or tag_stop_position < tag_start_position:
+            return text
+        text = text.replace(text[tag_start_position:tag_stop_position+1], '')
 
 
 def get_domain_from_url(url):
