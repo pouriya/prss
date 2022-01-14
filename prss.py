@@ -182,7 +182,8 @@ def read_urls_from_file(filename):
             line_number += 1
             continue
         parts = line.split(' ', 1)
-        name = parts[1] + ' ' if len(parts) == 2 else ''
+        name = parts[1] if len(parts) == 2 else ''
+        name = name.strip()
         link = parts[0]
         if re.match(url_check_regex, link) is not None:
             if link not in links:
