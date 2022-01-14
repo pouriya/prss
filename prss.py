@@ -146,7 +146,7 @@ def get_domain_from_url(url):
     domain = address_parts[0]
     domain_parts = domain.split('.')
     name = domain_parts[-2] if len(domain_parts) > 1 else domain
-    return '[' + name.upper() + ']'
+    return name.upper()
 
 
 class PrintError(Exception):
@@ -565,7 +565,7 @@ if __name__ == '__main__':
                     self.hostname,
                     summary + '\n - [**LINK**]({})'.format(url),
                     self.application_token,
-                    title='[' + name + ']\n ' + title,
+                    title=name + '\n ' + title,
                     tls=self.tls,
                     port=self.port,
                     extras=extras
