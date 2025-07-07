@@ -15,7 +15,7 @@ import http.client as http_client
 import urllib.parse as url_parser
 
 
-__version__ = '22.01.15'
+__version__ = '25.07.07'
 __author__ = 'pouriya.jahanbakhsh@gmail.com'
 
 colorize = True if environ.get('PRSS_NO_COLORIZE') is None else False
@@ -351,13 +351,20 @@ class PRSS:
         pass
 
 
-def make_http_connection(host, port, tls, timeout):
+def make_http_connection(host, port, tls, tls_skip_verify, timeout):
     default_port = 443 if tls else 80
     port = port if port is not None else default_port
     timeout = timeout if timeout is not None else DEFAULT_HTTP_CONNECT_TIMEOUT
     try:
         if tls:
-            http_connection = http_client.HTTPSConnection(host, port=port, timeout=timeout)
+            if tls_skip_verify:
+                import ssl
+                insecure_context = ssl.create_default_context()
+                insecure_context.check_hostname = False
+                insecure_context.verify_mode = ssl.CERT_NONE
+                http_connection = http_client.HTTPSConnection(host, port=port, timeout=timeout, context=insecure_context)
+            else:
+                http_connection = http_client.HTTPSConnection(host, port=port, timeout=timeout)
         else:
             http_connection = http_client.HTTPConnection(host, port=port, timeout=timeout)
     except Exception as connect_error:
@@ -416,11 +423,12 @@ def send_notification(
         priority=None,
         title=None,
         tls=True,
+        tls_skip_verify=False,
         extras=None,
         port=None,
         timeout=None
 ):
-    http_connection = make_http_connection(host, port, tls, timeout)
+    http_connection = make_http_connection(host, port, tls, tls_skip_verify, timeout)
     if http_connection is False:
         return False
     http_path = '/message?' + url_parser.urlencode({'token': application_token})
@@ -492,6 +500,7 @@ if __name__ == '__main__':
         print('PRSS_SLEEP_RANGE_STOP=120')
         print()
         print('Undefined environment variables:')
+        print('PRSS_GOTIFY_TLS_SKIP_VERIFY')
         print('PRSS_NO_COLORIZE')
         print('PRSS_SYSLOG')
         print('PRSS_PRINT_RSS_ENTRY')
@@ -516,7 +525,8 @@ if __name__ == '__main__':
                 hostname,
                 port,
                 application_token,
-                tls
+                tls,
+                tls_skip_verify
         ):
             super().__init__(
                 url_filename,
@@ -528,6 +538,7 @@ if __name__ == '__main__':
             self.port = port
             self.application_token = application_token
             self.tls = tls
+            self.tls_skip_verify = tls_skip_verify
 
         def post_update_cache(self, feeds):
             self.send_feeds_to_gotify(feeds)
@@ -567,6 +578,7 @@ if __name__ == '__main__':
                     self.application_token,
                     title=name + '\n ' + title,
                     tls=self.tls,
+                    tls_skip_verify=self.tls_skip_verify,
                     port=self.port,
                     extras=extras
                 )
@@ -604,7 +616,8 @@ if __name__ == '__main__':
             ('GOTIFY_HOSTNAME', None),
             ('GOTIFY_APPLICATION_TOKEN', None),
             ('GOTIFY_PORT', '443'),
-            ('GOTIFY_TLS', '1')
+            ('GOTIFY_TLS', '1'),
+            ('GOTIFY_TLS_SKIP_VERIFY', '0'),
         ]
     ]
     cfg = {}
@@ -618,6 +631,7 @@ if __name__ == '__main__':
         key = key.replace('PRSS_', '')
         cfg[key] = value
     cfg['GOTIFY_TLS'] = True if cfg['GOTIFY_TLS'] == '1' else False
+    cfg['GOTIFY_TLS_SKIP_VERIFY'] = True if cfg['GOTIFY_TLS_SKIP_VERIFY'] == '1' else False
     try:
         Main(
             cfg['URL_FILE'],
@@ -627,7 +641,8 @@ if __name__ == '__main__':
             cfg['GOTIFY_HOSTNAME'],
             int(cfg['GOTIFY_PORT']),
             cfg['GOTIFY_APPLICATION_TOKEN'],
-            cfg['GOTIFY_TLS']
+            cfg['GOTIFY_TLS'],
+            cfg['GOTIFY_TLS_SKIP_VERIFY']
         ).run()
     except KeyboardInterrupt:
         print()
