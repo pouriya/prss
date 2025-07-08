@@ -1,6 +1,6 @@
 # Lines starting with '#' will be discarded
 # Each line should contain one RSS-feed link
 # After link you can place an optional subject (which is used in mail content) 
-https://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss NASA Image of the Day
+https://www.nasa.gov/feeds/iotd-feed/ NASA Image of the Day
 https://www.varzesh3.com/rss/all Varzesh 3
 

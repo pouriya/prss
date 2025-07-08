@@ -29,11 +29,12 @@ PRSS_CACHE_MAX_SIZE=1000
 PRSS_SLEEP_RANGE_START=60
 PRSS_SLEEP_RANGE_STOP=120
 
-Undefined environment variables:
-PRSS_GOTIFY_TLS_SKIP_VERIFY
-PRSS_NO_COLORIZE
-PRSS_SYSLOG
-PRSS_PRINT_RSS_ENTRY
+Boolean environment variables with their default values:
+PRSS_GOTIFY_TLS_SKIP_VERIFY=0
+PRSS_NO_COLORIZE=0
+PRSS_SYSLOG=0
+PRSS_PRINT_RSS_ENTRY=0
+PRSS_SKIP_SEND_AND_PRINT=0
 
 Note that you can put environment variables in a file named prss.env or .env too.
 

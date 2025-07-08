@@ -526,7 +526,8 @@ if __name__ == '__main__':
                 port,
                 application_token,
                 tls,
-                tls_skip_verify
+                tls_skip_verify,
+                skip_send_and_print
         ):
             super().__init__(
                 url_filename,
@@ -539,6 +540,7 @@ if __name__ == '__main__':
             self.application_token = application_token
             self.tls = tls
             self.tls_skip_verify = tls_skip_verify
+            self.skip_send_and_print = skip_send_and_print
 
         def post_update_cache(self, feeds):
             self.send_feeds_to_gotify(feeds)
@@ -572,17 +574,29 @@ if __name__ == '__main__':
                     # 'android::action': {'onReceive': {'intentUrl': url}},
                     'client::display': {'contentType': 'text/markdown'}
                 }
-                send_notification(
-                    self.hostname,
-                    summary + '\n - [**LINK**]({})'.format(url),
-                    self.application_token,
-                    title=name + '\n ' + title,
-                    tls=self.tls,
-                    tls_skip_verify=self.tls_skip_verify,
-                    port=self.port,
-                    extras=extras
-                )
-                notification_count += 1
+                if image:
+                    extras['client::notification']['bigImageUrl'] = image
+                link_md = '[**LINK**]({})'.format(url)
+                if not summary:
+                    summary = 'NO DESCRIPTION'
+                summary = '{}\n - {}'.format(summary, link_md)
+                if self.skip_send_and_print:
+                    log_info(
+                        'skip sending notification. name={gray}{!r}{reset} title={yellow}{!r}{reset} image={green}{!r}{reset} summary={white}{!r}{reset}',
+                        [name, title, image, summary]
+                    )
+                else:
+                    send_notification(
+                        self.hostname,
+                        summary,
+                        self.application_token,
+                        title=name + '\n ' + title,
+                        tls=self.tls,
+                        tls_skip_verify=self.tls_skip_verify,
+                        port=self.port,
+                        extras=extras
+                    )
+                    notification_count += 1
             log_info(
                 '{green}{}{reset} {white}{}{reset} content(s) have been sent to Gotify at {white}{!r}{reset}',
                 [notification_count, lang, self.hostname]
@@ -618,6 +632,7 @@ if __name__ == '__main__':
             ('GOTIFY_PORT', '443'),
             ('GOTIFY_TLS', '1'),
             ('GOTIFY_TLS_SKIP_VERIFY', '0'),
+            ('SKIP_SEND_AND_PRINT', '0'),
         ]
     ]
     cfg = {}
@@ -625,13 +640,15 @@ if __name__ == '__main__':
         value = environ.get(key)
         if not value:
             if not default_value:
-                log_error('required environment variable {yellow}{!r}{reset} is not set', [key])
-                exit(1)
+                if not key.startswith('PRSS_GOTIFY') and environ.get('SKIP_SEND_AND_PRINT') != '1':
+                    log_error('required environment variable {yellow}{!r}{reset} is not set', [key])
+                    exit(1)
             value = default_value
         key = key.replace('PRSS_', '')
         cfg[key] = value
     cfg['GOTIFY_TLS'] = True if cfg['GOTIFY_TLS'] == '1' else False
     cfg['GOTIFY_TLS_SKIP_VERIFY'] = True if cfg['GOTIFY_TLS_SKIP_VERIFY'] == '1' else False
+    cfg['SKIP_SEND_AND_PRINT'] = True if cfg['SKIP_SEND_AND_PRINT'] == '1' else False
     try:
         Main(
             cfg['URL_FILE'],
@@ -642,7 +659,8 @@ if __name__ == '__main__':
             int(cfg['GOTIFY_PORT']),
             cfg['GOTIFY_APPLICATION_TOKEN'],
             cfg['GOTIFY_TLS'],
-            cfg['GOTIFY_TLS_SKIP_VERIFY']
+            cfg['GOTIFY_TLS_SKIP_VERIFY'],
+            cfg['SKIP_SEND_AND_PRINT']
         ).run()
     except KeyboardInterrupt:
         print()
