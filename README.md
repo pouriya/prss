@@ -30,6 +30,7 @@ PRSS_SLEEP_RANGE_START=60
 PRSS_SLEEP_RANGE_STOP=120
 
 Undefined environment variables:
+PRSS_GOTIFY_TLS_SKIP_VERIFY
 PRSS_NO_COLORIZE
 PRSS_SYSLOG
 PRSS_PRINT_RSS_ENTRY
@@ -44,10 +45,12 @@ Author: pouriya.jahanbakhsh@gmail.com
 You should have Python3.6^ installed.
 ```sh
 $ pip3 install feedparser
-...
-$ curl -sSf https://raw.githubusercontent.com/pouriya/prss/22.01.15/prss.py > prss && \
+```
+then
+```sh
+$ curl -sSf https://raw.githubusercontent.com/pouriya/prss/25.07.07/prss.py > prss && \
   chmod a+x prss                                                                   && \
   sudo mv prss /usr/local/bin/prss                                                 && \
   prss -v
-22.01.15
+25.07.07
 ```
