@@ -398,6 +398,8 @@ def read_and_decode_http_response(http_connection, host, port, http_path, body, 
     if not response:
         return None
     try:
+        if type(response) == bytes:
+            response = response.decode()
         response = json_decode(response)
     except Exception as decode_error:
         log_error(
@@ -442,13 +444,16 @@ def send_notification(
     if extras:
         body['extras'] = extras
     body_json = json_encode(body, sort_keys=True)
+    body_json_truncated = body_json
+    if len(body_json_truncated) > 1000:
+            body_json_truncated = body_json_truncated[:996] + " ..."
     try:
         http_connection.request('POST', http_path, body_json, http_headers)
     except Exception as request_error:
         log_error(
             'could not send request to {yellow}{}:{}/{}{reset}{red} with body{reset} {yellow}{}{reset}{red}:{reset} {wh'
             'ite}{}{reset}',
-            [host, port, log_http_path, body_json, request_error]
+            [host, port, log_http_path, body_json_truncated, request_error]
         )
         return False
     response = read_and_decode_http_response(
@@ -456,15 +461,16 @@ def send_notification(
         host,
         port,
         log_http_path,
-        body_json,
+        body_json_truncated,
         'send notification to'
     )
     if type(response) is dict:
         log_info(
             'sent notification to {yellow}{}:{}{reset}{red} with body{reset} {yellow}{}{reset}',
-            [host, port, body_json]
+            [host, port, body_json_truncated]
         )
-        return response['id']
+        if 'id' in response.keys():
+            return response['id']
     return response
 
 
@@ -576,9 +582,11 @@ if __name__ == '__main__':
                 }
                 if image:
                     extras['client::notification']['bigImageUrl'] = image
-                link_md = '[**LINK**]({})'.format(url)
+                link_md = '[**Continue Reading...**]({})'.format(url)
                 if not summary:
                     summary = 'NO DESCRIPTION'
+                if len(summary) > 350:
+                    summary = summary[:350] + " ..."
                 summary = '{}\n - {}'.format(summary, link_md)
                 if self.skip_send_and_print:
                     log_info(
