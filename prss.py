@@ -133,7 +133,7 @@ def remove_html_tags(text):
     while True:
         tag_start_position, tag_stop_position = text.find('<'), text.find('>')
         # print(text, tag_start_position, tag_stop_position)
-        if tag_start_position is -1 or tag_stop_position is -1 or tag_stop_position < tag_start_position:
+        if tag_start_position == -1 or tag_stop_position == -1 or tag_stop_position < tag_start_position:
             return text
         text = text.replace(text[tag_start_position:tag_stop_position+1], '')
 
